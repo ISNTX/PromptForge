@@ -56,7 +56,7 @@ export default function Game() {
     if (!canvas) return;
     const screenshot = await html2canvas(canvas);
     const dataUrl = screenshot.toDataURL('image/png');
-    const price = prompt('Set your price for this level ($0.99 – $2.99)', '1.99');
+    const price = prompt('Set your price ($0.99 – $2.99)', '1.99');
     if (!price) return;
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -67,7 +67,7 @@ export default function Game() {
       seller_id: user?.id,
       seller_name: user?.email?.split('@')[0] || 'Anonymous'
     });
-    alert(`🎉 Your level is now live in the Marketplace for $${price}!`);
+    alert(`🎉 Level listed for $${price}!`);
     loadMarketplace();
   };
 
@@ -81,10 +81,45 @@ export default function Game() {
     window.location.href = session.url;
   };
 
-  // Simple canvas game (physics + block clearing) - keep your existing initGame function here
+  const shareCurrentLevel = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const screenshot = await html2canvas(canvas);
+    const dataUrl = screenshot.toDataURL('image/png');
+    const text = `I just cleared a ${levelPrompt} level in PromptForge! Score: ${score} 🔥 https://promptforge-sage.vercel.app #PromptForge #AIGame`;
+    if (navigator.share) navigator.share({ text, files: [new File([await (await fetch(dataUrl)).blob()], 'level.png', { type: 'image/png' })] });
+    else alert(text);
+  };
+
   const initGame = (endless = false) => {
-    // ... (your existing canvas code from previous versions)
-    console.log('Game initialized');
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = 400;
+    canvas.height = 400;
+    let blocks: any[] = [];
+    for (let y = 0; y < 6; y++) {
+      for (let x = 0; x < 6; x++) {
+        blocks.push({ x: x * 60 + 20, y: y * 60 + 20, size: 50, color: ['#facc15', '#22d3ee', '#a78bfa', '#f472b6'][Math.floor(Math.random()*4)], vy: 0 });
+      }
+    }
+    const animate = () => {
+      ctx.clearRect(0, 0, 400, 400);
+      if (background) {
+        const img = new Image();
+        img.src = background;
+        ctx.drawImage(img, 0, 0, 400, 400);
+      }
+      blocks.forEach(b => {
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x, b.y, b.size, b.size);
+        b.y += b.vy;
+        b.vy += 0.3;
+        if (b.y > 400) b.vy = -b.vy * 0.6;
+      });
+      requestAnimationFrame(animate);
+    };
+    animate();
   };
 
   useEffect(() => {
@@ -94,30 +129,39 @@ export default function Game() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center p-4 font-mono">
-      {/* Header, canvas, mode tabs, input, buttons from v1.5 remain the same */}
-      {/* ... (keep all previous UI elements) */}
+      <h1 className="text-4xl font-bold text-yellow-400 mb-4">PromptForge</h1>
 
-      {/* NEW Sell button */}
-      <button onClick={sellMyLevel} className="mt-4 w-full max-w-md py-4 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-bold rounded-3xl flex items-center justify-center gap-2">
-        💰 Sell My AI Level (Earn 70%)
-      </button>
+      <div className="relative w-full max-w-md aspect-square border-4 border-yellow-400 rounded-3xl overflow-hidden">
+        {isGenerating && <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-xl animate-pulse z-10">✨ Generating AI Level...</div>}
+        <canvas ref={canvasRef} className="w-full h-full cursor-pointer" />
+      </div>
 
-      {/* Marketplace */}
+      <input value={levelPrompt} onChange={e => setLevelPrompt(e.target.value)} className="mt-6 bg-zinc-900 p-4 rounded-2xl w-full max-w-md text-white" placeholder="Type any theme..." />
+
+      <div className="flex gap-3 mt-6 w-full max-w-md">
+        <button onClick={startNewLevel} className="flex-1 py-5 bg-yellow-400 text-black font-bold rounded-3xl">New AI Level</button>
+        <button onClick={shareCurrentLevel} className="flex-1 py-5 bg-white/10 hover:bg-white/20 rounded-3xl font-bold">📸 Share Level</button>
+      </div>
+
+      <button onClick={sellMyLevel} className="mt-4 w-full max-w-md py-4 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-bold rounded-3xl">💰 Sell My AI Level (Earn 70%)</button>
+
       <div className="mt-8 w-full max-w-md">
         <h2 className="text-xl font-bold mb-4">🛒 AI Marketplace</h2>
         <div className="grid grid-cols-2 gap-3">
           {marketplaceListings.map((item) => (
             <div key={item.id} className="bg-zinc-900 rounded-2xl p-3 cursor-pointer" onClick={() => buyMarketplaceLevel(item)}>
               <img src={item.image_url} className="w-full aspect-square object-cover rounded-xl" />
-              <p className="text-xs mt-2 line-clamp-1">{item.prompt}</p>
-              <div className="flex justify-between text-sm mt-1">
-                <span className="text-emerald-400">${(item.price / 100).toFixed(2)}</span>
-                <span className="opacity-60">by {item.seller_name}</span>
+              <p className="text-xs mt-2">{item.prompt}</p>
+              <div className="flex justify-between mt-1">
+                <span className="text-emerald-400 font-bold">${(item.price / 100).toFixed(2)}</span>
+                <span className="text-xs opacity-60">by {item.seller_name}</span>
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      <button onClick={() => createCheckoutSession(499, 'subscription')} className="mt-6 w-full max-w-md py-4 bg-purple-500 text-white font-bold rounded-3xl">⭐ Go Pro — $4.99/mo</button>
     </div>
   );
 }
