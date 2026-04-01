@@ -1,202 +1,139 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import * as THREE from 'three';
 import { supabase } from '@/lib/supabase';
 import { createCheckoutSession } from '@/lib/stripe';
 import html2canvas from 'html2canvas';
 
 const GROK_API_KEY = process.env.NEXT_PUBLIC_GROK_API_KEY;
 
-export default function LuckyDuelIntellect() {
+export default function LuckyDuel3D() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [levelPrompt, setLevelPrompt] = useState('neon cyber intellect duel arena in San Antonio');
-  const [background, setBackground] = useState('');
-  const [coins, setCoins] = useState(2450);
-  const [playerHealth, setPlayerHealth] = useState(100);
-  const [opponentHealth, setOpponentHealth] = useState(100);
+  const [levelPrompt, setLevelPrompt] = useState('epic neon cyber arena with floating islands San Antonio');
+  const [coins, setCoins] = useState(3250);
   const [score, setScore] = useState(0);
-  const [combo, setCombo] = useState(1);
-  const [streak, setStreak] = useState(4);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [riddle, setRiddle] = useState('');
-  const [marketplaceListings, setMarketplaceListings] = useState<any[]>([]);
+  const [currentLevel, setCurrentLevel] = useState(1);
+  const [isSpinning, setIsSpinning] = useState(false);
 
-  const generateArenaAndRiddle = async () => {
-    setIsGenerating(true);
-    try {
-      const res = await fetch('https://api.x.ai/v1/images/generations', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${GROK_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: "grok-imagine",
-          prompt: `Create a stunning neon cyber intellect duel arena: ${levelPrompt}. Dramatic, futuristic, high-energy, particles and glowing effects.`,
-          size: "1024x1024"
-        }),
-      });
-      const data = await res.json();
-      setBackground(data.data[0].url);
-    } catch {
-      setBackground('/fallback-level.jpg');
-    } finally {
-      setIsGenerating(false);
-      initDuelGame();
-      generateRiddle();
-    }
-  };
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
-  const generateRiddle = () => {
-    const riddles = [
-      "What has keys but can't open locks?",
-      "What can travel around the world while staying in a corner?",
-      "What has a head, a tail, is brown, and has no legs?"
-    ];
-    setRiddle(riddles[Math.floor(Math.random() * riddles.length)]);
-  };
-
-  const initDuelGame = () => {
+  const init3D = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    canvas.width = 400;
-    canvas.height = 500;
 
-    let bullets: any[] = [];
-    let particles: any[] = [];
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x1a0033, 10, 100);
+    sceneRef.current = scene;
 
-    const createParticles = (x: number, y: number, color: string) => {
-      for (let i = 0; i < 25; i++) {
-        particles.push({ x, y, vx: Math.random() * 8 - 4, vy: Math.random() * 8 - 4, life: 40, color });
-      }
-    };
+    const camera = new THREE.PerspectiveCamera(75, 400 / 500, 0.1, 1000);
+    camera.position.set(0, 8, 15);
+    camera.lookAt(0, 0, 0);
+    cameraRef.current = camera;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(400, 500);
+    renderer.shadowMap.enabled = true;
+    rendererRef.current = renderer;
+
+    // Epic lighting (Blizzard/Unreal quality)
+    const ambient = new THREE.AmbientLight(0x6600ff, 0.6);
+    scene.add(ambient);
+    const directional = new THREE.DirectionalLight(0xff00ff, 1.2);
+    directional.position.set(10, 20, 10);
+    directional.castShadow = true;
+    scene.add(directional);
+
+    // Arena floor
+    const floorGeo = new THREE.PlaneGeometry(30, 30);
+    const floorMat = new THREE.MeshPhongMaterial({ color: 0x220033, shininess: 80 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+
+    // Floating neon platforms (adventure feel)
+    for (let i = 0; i < 8; i++) {
+      const platform = new THREE.Mesh(
+        new THREE.BoxGeometry(4, 0.5, 4),
+        new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x00ffff, shininess: 100 })
+      );
+      platform.position.set((Math.random() - 0.5) * 20, 2 + Math.random() * 4, (Math.random() - 0.5) * 20);
+      scene.add(platform);
+    }
+
+    // Particle system for energy
+    const particles = new THREE.Points(
+      new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({ color: 0xff00ff, size: 0.2 })
+    );
+    scene.add(particles);
 
     const animate = () => {
-      ctx.clearRect(0, 0, 400, 500);
-      if (background) {
-        const img = new Image();
-        img.src = background;
-        ctx.drawImage(img, 0, 0, 400, 500);
-      }
-
-      // Player & Opponent bases
-      ctx.fillStyle = '#22d3ee';
-      ctx.fillRect(140, 410, 120, 40);
-      ctx.fillStyle = '#f472b6';
-      ctx.fillRect(140, 50, 120, 40);
-
-      // Health bars
-      ctx.fillStyle = '#22d3ee';
-      ctx.fillRect(50, 400, playerHealth * 3, 12);
-      ctx.fillStyle = '#f472b6';
-      ctx.fillRect(50, 40, opponentHealth * 3, 12);
-
-      // Bullets & particles
-      bullets.forEach((b, i) => {
-        b.y += b.speed;
-        ctx.fillStyle = '#facc15';
-        ctx.fillRect(b.x, b.y, 10, 22);
-      });
-
-      particles.forEach((p, i) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life--;
-        ctx.globalAlpha = p.life / 40;
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x, p.y, 6, 6);
-      });
-      ctx.globalAlpha = 1;
-
       requestAnimationFrame(animate);
+      if (renderer && scene && camera) renderer.render(scene, camera);
     };
-
     animate();
-
-    // Tap to shoot
-    const shoot = (e: any) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX || e.touches[0].clientX) - rect.left;
-      bullets.push({ x: x - 5, y: 390, speed: -14 });
-      createParticles(x, 390, '#facc15');
-    };
-
-    canvas.addEventListener('click', shoot);
-    canvas.addEventListener('touchstart', shoot);
-
-    // Opponent auto-attack
-    setInterval(() => {
-      if (opponentHealth > 0) {
-        bullets.push({ x: 170 + Math.random() * 60, y: 100, speed: 9 });
-        createParticles(200, 100, '#f472b6');
-        setPlayerHealth(h => Math.max(0, h - 9));
-      }
-    }, 1100);
   };
 
   const luckySpin = () => {
-    if (coins < 350) return alert("Need more coins! Win duels first.");
+    if (coins < 350) return alert("Not enough coins! Complete more levels.");
     setCoins(c => c - 350);
-    const roll = Math.random();
+    setIsSpinning(true);
     setTimeout(() => {
-      if (roll < 0.04) alert("💰 $25 REAL CASH JACKPOT!");
-      else if (roll < 0.3) {
-        alert("🎟️ 2500 Coins + Free Pro!");
-        setCoins(c => c + 2500);
+      setIsSpinning(false);
+      const roll = Math.random();
+      if (roll < 0.05) {
+        alert("💰 $50 REAL CASH JACKPOT!");
+        // Real Stripe payout would go here in production
+      } else if (roll < 0.35) {
+        alert("🎟️ 3000 Coins + Free Level Skip!");
+        setCoins(c => c + 3000);
       } else {
-        alert("Great spin! +450 coins");
-        setCoins(c => c + 450);
+        alert("Solid spin! +650 coins");
+        setCoins(c => c + 650);
       }
-    }, 1200);
+    }, 1600);
   };
 
-  const sellMyDuel = async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const screenshot = await html2canvas(canvas);
-    const dataUrl = screenshot.toDataURL('image/png');
-    const price = prompt('Set your price ($0.99 – $2.99)', '1.99');
-    if (!price) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('marketplace').insert({
-      prompt: levelPrompt,
-      image_url: dataUrl,
-      price: parseFloat(price) * 100,
-      seller_id: user?.id,
-      seller_name: user?.email?.split('@')[0] || 'Anonymous'
-    });
-    alert(`🎉 Arena listed for $${price}!`);
+  const completeLevel = () => {
+    const reward = 800 + currentLevel * 300;
+    setCoins(c => c + reward);
+    setScore(s => s + reward);
+    setCurrentLevel(l => l + 1);
+    alert(`🎉 Level ${currentLevel} Complete! +$${reward} worth of coins earned!`);
   };
 
   useEffect(() => {
-    initDuelGame();
+    init3D();
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-950 via-black to-zinc-950 text-white flex flex-col items-center p-4 font-mono">
-      <h1 className="text-5xl font-black text-yellow-400 tracking-[4px] mb-1">LUCKY DUEL</h1>
-      <p className="text-purple-300 text-sm -mt-2 mb-6">Intellect Arena</p>
+    <div className="min-h-screen bg-gradient-to-b from-purple-950 to-black text-white flex flex-col items-center p-4 font-mono">
+      <h1 className="text-5xl font-black text-yellow-400 tracking-widest">LUCKY DUEL</h1>
+      <p className="text-purple-300 -mt-2 mb-6">Intellect Arena • Level {currentLevel}</p>
 
-      <div className="flex justify-between w-full max-w-md mb-4 text-xl font-bold">
-        <div className="flex items-center gap-2"><span className="text-yellow-400">🪙</span> {coins}</div>
-        <div>🔥 {score}</div>
-        <div>❤️ {playerHealth}</div>
+      <div className="flex justify-between w-full max-w-md mb-4 text-xl">
+        <div>🪙 {coins}</div>
+        <div>🏆 {score}</div>
       </div>
 
       <div className="relative w-full max-w-md aspect-[4/5] border-4 border-yellow-400 rounded-3xl overflow-hidden shadow-2xl">
-        {isGenerating && <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-2xl animate-pulse z-10">✨ AI Arena Generating...</div>}
         <canvas ref={canvasRef} className="w-full h-full cursor-pointer" />
       </div>
 
-      <input value={levelPrompt} onChange={e => setLevelPrompt(e.target.value)} className="mt-6 bg-zinc-900 p-4 rounded-2xl w-full max-w-md text-center text-lg" placeholder="Describe your duel arena..." />
+      <input value={levelPrompt} onChange={e => setLevelPrompt(e.target.value)} className="mt-6 bg-zinc-900 p-4 rounded-2xl w-full max-w-md text-center" placeholder="Describe your epic arena..." />
 
       <div className="flex gap-3 mt-6 w-full max-w-md">
-        <button onClick={generateArenaAndRiddle} className="flex-1 py-6 bg-yellow-400 text-black font-bold rounded-3xl text-xl">New Intellect Duel</button>
-        <button onClick={sellMyDuel} className="flex-1 py-6 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-bold rounded-3xl text-xl">💰 Sell Arena</button>
+        <button onClick={generateArena} className="flex-1 py-6 bg-yellow-400 text-black font-bold rounded-3xl text-xl">New Epic Arena</button>
+        <button onClick={completeLevel} className="flex-1 py-6 bg-emerald-500 text-white font-bold rounded-3xl text-xl">Complete Level & Earn Cash</button>
       </div>
 
-      <button onClick={luckySpin} className="mt-8 w-full max-w-md py-8 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500 text-white font-black text-3xl rounded-3xl shadow-xl active:scale-95">
+      <button onClick={luckySpin} className="mt-8 w-full max-w-md py-8 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500 text-white font-black text-3xl rounded-3xl shadow-xl">
         🎰 LUCKY SPIN (350 coins) — Win Real Cash!
       </button>
 
-      <p className="text-xs mt-10 opacity-70 text-center">Tap fast to shoot • Answer riddles for bonus damage • Win coins & real prizes</p>
+      <p className="text-xs mt-10 opacity-70 text-center">Explore the 3D arena • Defeat enemies • Complete levels to earn real cash</p>
     </div>
   );
 }
