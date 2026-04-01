@@ -14,9 +14,7 @@ export default function Game() {
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(1);
   const [lives, setLives] = useState(3);
-  const [isPro, setIsPro] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState('');
   const [marketplaceListings, setMarketplaceListings] = useState<any[]>([]);
 
   const generateLevel = async (prompt: string) => {
@@ -38,7 +36,6 @@ export default function Game() {
       const data = await res.json();
       return data.data[0].url;
     } catch {
-      setError('AI timed out — using classic level');
       return '/fallback-level.jpg';
     } finally {
       setIsGenerating(false);
@@ -56,7 +53,7 @@ export default function Game() {
     if (!canvas) return;
     const screenshot = await html2canvas(canvas);
     const dataUrl = screenshot.toDataURL('image/png');
-    const price = prompt('Set your price ($0.99 – $2.99)', '1.99');
+    const price = prompt('Set your price for this level ($0.99 – $2.99)', '1.99');
     if (!price) return;
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -67,7 +64,7 @@ export default function Game() {
       seller_id: user?.id,
       seller_name: user?.email?.split('@')[0] || 'Anonymous'
     });
-    alert(`🎉 Level listed for $${price}!`);
+    alert(`🎉 Your level is now live in the Marketplace for $${price}!`);
     loadMarketplace();
   };
 
@@ -87,8 +84,9 @@ export default function Game() {
     const screenshot = await html2canvas(canvas);
     const dataUrl = screenshot.toDataURL('image/png');
     const text = `I just cleared a ${levelPrompt} level in PromptForge! Score: ${score} 🔥 https://promptforge-sage.vercel.app #PromptForge #AIGame`;
-    if (navigator.share) navigator.share({ text, files: [new File([await (await fetch(dataUrl)).blob()], 'level.png', { type: 'image/png' })] });
-    else alert(text);
+    if (navigator.share) {
+      navigator.share({ text, files: [new File([await (await fetch(dataUrl)).blob()], 'level.png', { type: 'image/png' })] });
+    } else alert(text);
   };
 
   const initGame = (endless = false) => {
@@ -129,14 +127,26 @@ export default function Game() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center p-4 font-mono">
-      <h1 className="text-4xl font-bold text-yellow-400 mb-4">PromptForge</h1>
+      <div className="w-full max-w-md flex justify-between items-center mb-4">
+        <h1 className="text-4xl font-bold text-yellow-400">PromptForge</h1>
+        <div className="flex items-center gap-4 text-xl">
+          <span>🔥 {score}</span>
+          <span className="text-purple-400">×{combo}</span>
+          <span>❤️ {lives}</span>
+        </div>
+      </div>
 
       <div className="relative w-full max-w-md aspect-square border-4 border-yellow-400 rounded-3xl overflow-hidden">
         {isGenerating && <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-xl animate-pulse z-10">✨ Generating AI Level...</div>}
         <canvas ref={canvasRef} className="w-full h-full cursor-pointer" />
       </div>
 
-      <input value={levelPrompt} onChange={e => setLevelPrompt(e.target.value)} className="mt-6 bg-zinc-900 p-4 rounded-2xl w-full max-w-md text-white" placeholder="Type any theme..." />
+      <input 
+        value={levelPrompt} 
+        onChange={e => setLevelPrompt(e.target.value)} 
+        className="mt-6 bg-zinc-900 p-4 rounded-2xl w-full max-w-md text-white text-center" 
+        placeholder="Type any theme..." 
+      />
 
       <div className="flex gap-3 mt-6 w-full max-w-md">
         <button onClick={startNewLevel} className="flex-1 py-5 bg-yellow-400 text-black font-bold rounded-3xl">New AI Level</button>
@@ -151,7 +161,7 @@ export default function Game() {
           {marketplaceListings.map((item) => (
             <div key={item.id} className="bg-zinc-900 rounded-2xl p-3 cursor-pointer" onClick={() => buyMarketplaceLevel(item)}>
               <img src={item.image_url} className="w-full aspect-square object-cover rounded-xl" />
-              <p className="text-xs mt-2">{item.prompt}</p>
+              <p className="text-xs mt-2 line-clamp-1">{item.prompt}</p>
               <div className="flex justify-between mt-1">
                 <span className="text-emerald-400 font-bold">${(item.price / 100).toFixed(2)}</span>
                 <span className="text-xs opacity-60">by {item.seller_name}</span>
@@ -161,7 +171,7 @@ export default function Game() {
         </div>
       </div>
 
-      <button onClick={() => createCheckoutSession(499, 'subscription')} className="mt-6 w-full max-w-md py-4 bg-purple-500 text-white font-bold rounded-3xl">⭐ Go Pro — $4.99/mo</button>
+      <button onClick={() => createCheckoutSession(499, 'subscription')} className="mt-8 w-full max-w-md py-4 bg-purple-500 text-white font-bold rounded-3xl">⭐ Go Pro — $4.99/mo</button>
     </div>
   );
 }
