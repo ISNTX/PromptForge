@@ -6,17 +6,18 @@ import html2canvas from 'html2canvas';
 
 const GROK_API_KEY = process.env.NEXT_PUBLIC_GROK_API_KEY;
 
-export default function CashCarnival() {
+export default function LuckyDuel() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [levelPrompt, setLevelPrompt] = useState('neon carnival night in San Antonio');
+  const [levelPrompt, setLevelPrompt] = useState('neon cyber duel arena in San Antonio');
   const [background, setBackground] = useState('');
-  const [coins, setCoins] = useState(1250);
+  const [coins, setCoins] = useState(1850);
+  const [playerHealth, setPlayerHealth] = useState(100);
+  const [opponentHealth, setOpponentHealth] = useState(100);
   const [score, setScore] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [prizesCaught, setPrizesCaught] = useState(0);
-  const [marketplaceListings, setMarketplaceListings] = useState<any[]>([]);
+  const [isSpinning, setIsSpinning] = useState(false);
 
-  const generateCarnival = async () => {
+  const generateDuelArena = async () => {
     setIsGenerating(true);
     try {
       const res = await fetch('https://api.x.ai/v1/images/generations', {
@@ -24,7 +25,7 @@ export default function CashCarnival() {
         headers: { 'Authorization': `Bearer ${GROK_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: "grok-imagine",
-          prompt: `Create a vibrant, flashy carnival background for a cash prize game: ${levelPrompt}. Neon lights, spinning wheels, prizes falling, exciting and addictive.`,
+          prompt: `Create a flashy neon cyber duel arena background for a cash game: ${levelPrompt}. High energy, dramatic lighting, prizes and coins everywhere.`,
           size: "1024x1024"
         }),
       });
@@ -34,30 +35,19 @@ export default function CashCarnival() {
       setBackground('/fallback-level.jpg');
     } finally {
       setIsGenerating(false);
-      initCarnivalGame();
+      initDuelGame();
     }
   };
 
-  const initCarnivalGame = () => {
+  const initDuelGame = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
     canvas.width = 400;
     canvas.height = 500;
 
-    let fallingItems: any[] = [];
+    let bullets: any[] = [];
     let animationFrame: number;
-
-    const spawnItem = () => {
-      fallingItems.push({
-        x: Math.random() * 340 + 30,
-        y: -50,
-        size: 35 + Math.random() * 25,
-        speed: 3 + Math.random() * 4,
-        type: Math.random() > 0.6 ? 'coin' : 'prize',
-        color: Math.random() > 0.6 ? '#facc15' : '#22d3ee'
-      });
-    };
 
     const animate = () => {
       ctx.clearRect(0, 0, 400, 500);
@@ -67,66 +57,81 @@ export default function CashCarnival() {
         ctx.drawImage(img, 0, 0, 400, 500);
       }
 
-      fallingItems = fallingItems.filter(item => {
-        item.y += item.speed;
-        ctx.fillStyle = item.color;
-        ctx.fillRect(item.x, item.y, item.size, item.size);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px monospace';
-        ctx.fillText(item.type === 'coin' ? '🪙' : '🎟️', item.x + 5, item.y + 28);
-        return item.y < 520;
+      // Player (bottom)
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillRect(150, 420, 100, 30); // player base
+
+      // Opponent (top)
+      ctx.fillStyle = '#f472b6';
+      ctx.fillRect(150, 50, 100, 30); // opponent base
+
+      // Health bars
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillRect(50, 410, playerHealth * 3, 10);
+      ctx.fillStyle = '#f472b6';
+      ctx.fillRect(50, 40, opponentHealth * 3, 10);
+
+      // Bullets
+      bullets.forEach((b, i) => {
+        b.y += b.speed;
+        ctx.fillStyle = '#facc15';
+        ctx.fillRect(b.x, b.y, 8, 18);
+        if (b.y < 60 && b.direction === 'up') {
+          setOpponentHealth(h => Math.max(0, h - 12));
+          bullets.splice(i, 1);
+        }
       });
 
-      if (Math.random() < 0.15) spawnItem();
       animationFrame = requestAnimationFrame(animate);
     };
 
     animate();
 
-    // Tap to catch
-    canvas.addEventListener('click', (e) => {
+    // Tap to shoot
+    const shoot = (e: MouseEvent | TouchEvent) => {
       const rect = canvas.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const clickY = e.clientY - rect.top;
+      const x = (e instanceof MouseEvent ? e.clientX : (e as TouchEvent).touches[0].clientX) - rect.left;
+      bullets.push({ x: x - 4, y: 400, speed: -12, direction: 'up' });
+    };
 
-      fallingItems = fallingItems.filter(item => {
-        if (Math.abs(item.x + item.size/2 - clickX) < item.size && Math.abs(item.y + item.size/2 - clickY) < item.size) {
-          const earned = item.type === 'coin' ? 80 : 150;
-          setCoins(c => c + earned);
-          setScore(s => s + earned * 2);
-          setPrizesCaught(p => p + 1);
-          return false;
-        }
-        return true;
-      });
-    });
+    canvas.addEventListener('click', shoot);
+    canvas.addEventListener('touchstart', shoot);
+
+    // Auto opponent attack
+    setInterval(() => {
+      if (opponentHealth > 0) {
+        bullets.push({ x: 170 + Math.random() * 60, y: 90, speed: 8, direction: 'down' });
+        setPlayerHealth(h => Math.max(0, h - 8));
+      }
+    }, 1200);
   };
 
   const luckySpin = () => {
-    if (coins < 300) {
-      alert("Not enough coins! Catch more prizes first.");
-      return;
-    }
-    setCoins(c => c - 300);
-    const outcomes = [
-      { msg: "💰 $5 Cash Win!", value: 5 },
-      { msg: "🎟️ 800 Coins!", value: 800 },
-      { msg: "🔥 1500 Coins Jackpot!", value: 1500 },
-      { msg: "Better luck next time! +50 coins", value: 50 },
-    ];
-    const result = outcomes[Math.floor(Math.random() * outcomes.length)];
+    if (coins < 350) return alert("Not enough coins! Win more duels first.");
+    setCoins(c => c - 350);
+    setIsSpinning(true);
+
     setTimeout(() => {
-      alert(result.msg);
-      setCoins(c => c + result.value);
-    }, 800);
+      setIsSpinning(false);
+      const roll = Math.random();
+      if (roll < 0.03) {
+        alert("💰 JACKPOT! You won $25 real cash!");
+      } else if (roll < 0.25) {
+        alert("🎟️ 2000 Coins + Free Pro Boost!");
+        setCoins(c => c + 2000);
+      } else {
+        alert("Nice spin! +300 coins");
+        setCoins(c => c + 300);
+      }
+    }, 1800);
   };
 
-  const sellMyCarnival = async () => {
+  const sellMyDuel = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const screenshot = await html2canvas(canvas);
     const dataUrl = screenshot.toDataURL('image/png');
-    const price = prompt('Set your price for this carnival scene ($0.99 – $2.99)', '1.99');
+    const price = prompt('Set price for this duel arena ($0.99 – $2.99)', '1.99');
     if (!price) return;
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from('marketplace').insert({
@@ -136,39 +141,39 @@ export default function CashCarnival() {
       seller_id: user?.id,
       seller_name: user?.email?.split('@')[0] || 'Anonymous'
     });
-    alert(`🎉 Your carnival scene is now for sale for $${price}!`);
+    alert(`🎉 Duel arena listed for $${price}!`);
   };
 
   useEffect(() => {
-    initCarnivalGame();
+    initDuelGame();
   }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-950 to-black text-white flex flex-col items-center p-4 font-mono">
-      <h1 className="text-5xl font-black text-yellow-400 tracking-widest mb-2">CASH CARNIVAL</h1>
-      <div className="flex justify-between w-full max-w-md mb-4">
-        <div className="text-xl">🪙 {coins}</div>
-        <div className="text-xl">🏆 {score}</div>
-        <div className="text-xl">🎟️ {prizesCaught}</div>
+      <h1 className="text-5xl font-black text-yellow-400 tracking-widest mb-1">LUCKY DUEL</h1>
+      <div className="flex justify-between w-full max-w-md mb-4 text-xl">
+        <div>🪙 {coins}</div>
+        <div>🏆 {score}</div>
       </div>
 
       <div className="relative w-full max-w-md aspect-[4/5] border-4 border-yellow-400 rounded-3xl overflow-hidden shadow-2xl">
-        {isGenerating && <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-2xl animate-pulse z-10">✨ AI Carnival Loading...</div>}
+        {isGenerating && <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-2xl animate-pulse z-10">✨ AI Arena Loading...</div>}
+        {isSpinning && <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-3xl animate-pulse z-10">🎰 SPINNING...</div>}
         <canvas ref={canvasRef} className="w-full h-full cursor-pointer" />
       </div>
 
-      <input value={levelPrompt} onChange={e => setLevelPrompt(e.target.value)} className="mt-6 bg-zinc-900 p-4 rounded-2xl w-full max-w-md text-center" placeholder="Describe your carnival..." />
+      <input value={levelPrompt} onChange={e => setLevelPrompt(e.target.value)} className="mt-6 bg-zinc-900 p-4 rounded-2xl w-full max-w-md text-center" placeholder="Describe your duel arena..." />
 
       <div className="flex gap-3 mt-6 w-full max-w-md">
-        <button onClick={generateCarnival} className="flex-1 py-6 bg-yellow-400 text-black font-bold rounded-3xl text-2xl">New AI Carnival</button>
-        <button onClick={sellMyCarnival} className="flex-1 py-6 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-bold rounded-3xl text-2xl">💰 Sell Scene</button>
+        <button onClick={generateDuelArena} className="flex-1 py-6 bg-yellow-400 text-black font-bold rounded-3xl text-xl">New AI Duel</button>
+        <button onClick={sellMyDuel} className="flex-1 py-6 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-bold rounded-3xl text-xl">💰 Sell Arena</button>
       </div>
 
-      <button onClick={luckySpin} className="mt-8 w-full max-w-md py-8 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500 text-white font-black text-3xl rounded-3xl shadow-lg active:scale-95 transition">
-        🎰 LUCKY SPIN (300 coins) — Win Real Cash!
+      <button onClick={luckySpin} className="mt-8 w-full max-w-md py-8 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500 text-white font-black text-3xl rounded-3xl shadow-lg active:scale-95">
+        🎰 LUCKY SPIN (350 coins) — Win Real Cash!
       </button>
 
-      <p className="text-xs mt-10 opacity-70 text-center">Tap the falling prizes → earn coins → spin for real money chance</p>
+      <p className="text-center text-xs mt-10 opacity-70">Tap the arena fast to shoot • Win duels • Spin for real money</p>
     </div>
   );
 }
